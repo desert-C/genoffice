@@ -1,0 +1,33 @@
+name: Format AI Panel Test Fast
+
+on:
+  push:
+    branches:
+      - dev_format_ai_panel_fast
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev_format_ai_panel_fast
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Format lifecycle test
+        run: npx -y prettier@3.9.6 --write apps/slides/tests/ai-panel-run-lifecycle.test.ts
+      - name: Commit formatting
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- apps/slides/tests/ai-panel-run-lifecycle.test.ts; then
+            echo "No formatting changes needed"
+          else
+            git add apps/slides/tests/ai-panel-run-lifecycle.test.ts
+            git commit -m "style(slides): format agent lifecycle test"
+            git push origin HEAD:dev_format_ai_panel_fast
+          fi
