@@ -1,6 +1,6 @@
 name: Apply Slides Agent Lifecycle Fix
 
-on:
+"on":
   push:
     branches: [dev_agent_lifecycle_apply]
 
@@ -40,54 +40,11 @@ jobs:
           echo "Baseline regression reproduced (exit $code)"
 
       - name: Apply exact production fix
+        shell: bash
         run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          path = Path('apps/slides/src/renderer/ai/AiPanel.tsx')
-          text = path.read_text(encoding='utf-8')
-
-          old_persist = """          if (finalText && !cancelled) {
-            persistMessage('assistant', finalText, runToolsRef.current)
-          }
-"""
-          new_persist = """          if (!cancelled && (finalText || runToolsRef.current.length > 0)) {
-            persistMessage('assistant', finalText, runToolsRef.current)
-          }
-"""
-
-          old_images = """    for (const att of imageAtts.slice(0, MAX_IMAGES_PER_MESSAGE)) {
-      const result = await window.desktop.readAttachmentImage(att.path)
-      if (result.ok && result.base64 && result.mime) {
-        images.push({ base64: result.base64, mime: result.mime })
-      } else {
-        failures.push(result.error ?? t('aiReadFailed', { name: att.name }))
-      }
-    }
-"""
-          new_images = """    for (const att of imageAtts.slice(0, MAX_IMAGES_PER_MESSAGE)) {
-      try {
-        const result = await window.desktop.readAttachmentImage(att.path)
-        if (result.ok && result.base64 && result.mime) {
-          images.push({ base64: result.base64, mime: result.mime })
-        } else {
-          failures.push(result.error ?? t('aiReadFailed', { name: att.name }))
-        }
-      } catch {
-        failures.push(t('aiReadFailed', { name: att.name }))
-      }
-    }
-"""
-
-          if text.count(old_persist) != 1:
-              raise SystemExit('assistant persistence target changed')
-          if text.count(old_images) != 1:
-              raise SystemExit('attachment collection target changed')
-
-          text = text.replace(old_persist, new_persist, 1)
-          text = text.replace(old_images, new_images, 1)
-          path.write_text(text, encoding='utf-8')
-          PY
+          echo 'ZGlmZiAtLWdpdCBhL2FwcHMvc2xpZGVzL3NyYy9yZW5kZXJlci9haS9BaVBhbmVsLnRzeCBiL2FwcHMvc2xpZGVzL3NyYy9yZW5kZXJlci9haS9BaVBhbmVsLnRzeAotLS0gYS9hcHBzL3NsaWRlcy9zcmMvcmVuZGVyZXIvYWkvQWlQYW5lbC50c3gKKysrIGIvYXBwcy9zbGlkZXMvc3JjL3JlbmRlcmVyL2FpL0FpUGFuZWwudHN4CkBAIC0xNDEyLDkgKzE0MTIsOSBAQCBleHBvcnQgZnVuY3Rpb24gQWlQYW5lbCh7CiAgICAgICAgICAgfSkKICAgICAgICAgICAvLyBQZXJzaXN0IHRoZSBhc3Npc3RhbnQgbWVzc2FnZSAoZGVja1Byb2dyZXNzIG5vdCBzdG9yZWQ7IHRvb2xzIHN0b3JlIHRoZSB3aG9sZSBydW4ncyBmdWxsIGFjdGl2aXR5KSDigJQKICAgICAgICAgICAvLyBzaWRlIGVmZmVjdHMgb3V0c2lkZSB0aGUgdXBkYXRlciAoU3RyaWN0TW9kZSBkb3VibGUtaW52b2tlcyB1cGRhdGVycywgZHVwbGljYXRpbmcgaGlzdG9yeSB3cml0ZXMpCi0gICAgICAgICAgaWYgKGZpbmFsVGV4dCAmJiAhY2FuY2VsbGVkKSB7CisgICAgICAgICAgaWYgKCFjYW5jZWxsZWQgJiYgKGZpbmFsVGV4dCB8fCBydW5Ub29sc1JlZi5jdXJyZW50Lmxlbmd0aCA+IDApKSB7CiAgICAgICAgICAgICBwZXJzaXN0TWVzc2FnZSgnYXNzaXN0YW50JywgZmluYWxUZXh0LCBydW5Ub29sc1JlZi5jdXJyZW50KQogICAgICAgICAgIH0KICAgICAgICAgICAvLyBBIHN0b3Agd2l0aCBub3RoaW5nIHN0cmVhbWVkIGlzIGp1c3QgdGhlIHVzZXIgY2hhbmdpbmcgdGhlaXIgbWluZDsgYSBzdG9wCkBAIC0xNTIxLDEzICsxNTIxLDE3IEBAIGV4cG9ydCBmdW5jdGlvbiBBaVBhbmVsKHsKICAgICBjb25zdCBpbWFnZXM6IEFnZW50SW1hZ2VbXSA9IFtdCiAgICAgY29uc3QgZmFpbHVyZXM6IHN0cmluZ1tdID0gW10KICAgICBmb3IgKGNvbnN0IGF0dCBvZiBpbWFnZUF0dHMuc2xpY2UoMCwgTUFYX0lNQUdFU19QRVJfTUVTU0FHRSkpIHsKLSAgICAgIGNvbnN0IHJlc3VsdCA9IGF3YWl0IHdpbmRvdy5kZXNrdG9wLnJlYWRBdHRhY2htZW50SW1hZ2UoYXR0LnBhdGgpCi0gICAgICBpZiAocmVzdWx0Lm9rICYmIHJlc3VsdC5iYXNlNjQgJiYgcmVzdWx0Lm1pbWUpIHsKLSAgICAgICAgaW1hZ2VzLnB1c2goeyBiYXNlNjQ6IHJlc3VsdC5iYXNlNjQsIG1pbWU6IHJlc3VsdC5taW1lIH0pCi0gICAgICB9IGVsc2UgewotICAgICAgICBmYWlsdXJlcy5wdXNoKHJlc3VsdC5lcnJvciA/PyB0KCdhaVJlYWRGYWlsZWQnLCB7IG5hbWU6IGF0dC5uYW1lIH0pKQorICAgICAgdHJ5IHsKKyAgICAgICAgY29uc3QgcmVzdWx0ID0gYXdhaXQgd2luZG93LmRlc2t0b3AucmVhZEF0dGFjaG1lbnRJbWFnZShhdHQucGF0aCkKKyAgICAgICAgaWYgKHJlc3VsdC5vayAmJiByZXN1bHQuYmFzZTY0ICYmIHJlc3VsdC5taW1lKSB7CisgICAgICAgICAgaW1hZ2VzLnB1c2goeyBiYXNlNjQ6IHJlc3VsdC5iYXNlNjQsIG1pbWU6IHJlc3VsdC5taW1lIH0pCisgICAgICAgIH0gZWxzZSB7CisgICAgICAgICAgZmFpbHVyZXMucHVzaChyZXN1bHQuZXJyb3IgPz8gdCgnYWlSZWFkRmFpbGVkJywgeyBuYW1lOiBhdHQubmFtZSB9KSkKKyAgICAgICAgfQorICAgICAgfSBjYXRjaCB7CisgICAgICAgIGZhaWx1cmVzLnB1c2godCgnYWlSZWFkRmFpbGVkJywgeyBuYW1lOiBhdHQubmFtZSB9KSkKICAgICAgIH0KICAgICB9CiAgICAgaWYgKGltYWdlQXR0cy5sZW5ndGggPiBNQVhfSU1BR0VTX1BFUl9NRVNTQUdFKSB7Cg==' | base64 -d > /tmp/slides-lifecycle.patch
+          git apply --check /tmp/slides-lifecycle.patch
+          git apply /tmp/slides-lifecycle.patch
           git diff --check
           git diff -- apps/slides/src/renderer/ai/AiPanel.tsx
 
@@ -101,6 +58,7 @@ jobs:
         run: npm test -w @genoffice/slides
 
       - name: Commit verified production fix
+        shell: bash
         run: |
           git config user.name 'desert-C'
           git config user.email '76146920+desert-C@users.noreply.github.com'
