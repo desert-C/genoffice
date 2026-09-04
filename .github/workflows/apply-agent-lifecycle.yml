@@ -1,0 +1,110 @@
+name: Apply Slides Agent Lifecycle Fix
+
+on:
+  push:
+    branches: [dev_agent_lifecycle_apply]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Confirm regression reproduces before fix
+        shell: bash
+        run: |
+          set +e
+          npm test -w @genoffice/slides -- ai-panel-run-lifecycle.test.ts 2>&1 | tee /tmp/slides-lifecycle-baseline.log
+          code=${PIPESTATUS[0]}
+          set -e
+          if [ "$code" -eq 0 ]; then
+            echo "Expected lifecycle regression test to fail before the production fix"
+            exit 1
+          fi
+          echo "Baseline regression reproduced (exit $code)"
+
+      - name: Apply exact production fix
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('apps/slides/src/renderer/ai/AiPanel.tsx')
+          text = path.read_text(encoding='utf-8')
+
+          old_persist = """          if (finalText && !cancelled) {
+            persistMessage('assistant', finalText, runToolsRef.current)
+          }
+"""
+          new_persist = """          if (!cancelled && (finalText || runToolsRef.current.length > 0)) {
+            persistMessage('assistant', finalText, runToolsRef.current)
+          }
+"""
+
+          old_images = """    for (const att of imageAtts.slice(0, MAX_IMAGES_PER_MESSAGE)) {
+      const result = await window.desktop.readAttachmentImage(att.path)
+      if (result.ok && result.base64 && result.mime) {
+        images.push({ base64: result.base64, mime: result.mime })
+      } else {
+        failures.push(result.error ?? t('aiReadFailed', { name: att.name }))
+      }
+    }
+"""
+          new_images = """    for (const att of imageAtts.slice(0, MAX_IMAGES_PER_MESSAGE)) {
+      try {
+        const result = await window.desktop.readAttachmentImage(att.path)
+        if (result.ok && result.base64 && result.mime) {
+          images.push({ base64: result.base64, mime: result.mime })
+        } else {
+          failures.push(result.error ?? t('aiReadFailed', { name: att.name }))
+        }
+      } catch {
+        failures.push(t('aiReadFailed', { name: att.name }))
+      }
+    }
+"""
+
+          if text.count(old_persist) != 1:
+              raise SystemExit('assistant persistence target changed')
+          if text.count(old_images) != 1:
+              raise SystemExit('attachment collection target changed')
+
+          text = text.replace(old_persist, new_persist, 1)
+          text = text.replace(old_images, new_images, 1)
+          path.write_text(text, encoding='utf-8')
+          PY
+          git diff --check
+          git diff -- apps/slides/src/renderer/ai/AiPanel.tsx
+
+      - name: Regression tests after fix
+        run: npm test -w @genoffice/slides -- ai-panel-run-lifecycle.test.ts
+
+      - name: Slides typecheck
+        run: npm run typecheck -w @genoffice/slides
+
+      - name: Slides full test suite
+        run: npm test -w @genoffice/slides
+
+      - name: Commit verified production fix
+        run: |
+          git config user.name 'desert-C'
+          git config user.email '76146920+desert-C@users.noreply.github.com'
+          git add apps/slides/src/renderer/ai/AiPanel.tsx
+          git rm .github/workflows/apply-agent-lifecycle.yml
+          git commit -m 'fix(slides): preserve agent runs across lifecycle boundaries'
+          git push origin HEAD:dev_agent_lifecycle_apply
