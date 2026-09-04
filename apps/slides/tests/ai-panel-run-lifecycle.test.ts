@@ -199,20 +199,19 @@ describe('AiPanel agent run lifecycle (slides)', () => {
     )
   })
 
-  it('continues the agent run without images when attachment reading rejects', async () => {
-    const readAttachmentImage = vi.fn(async () => {
+  it('keeps readable images and continues the run when another attachment read rejects', async () => {
+    const readAttachmentImage = vi.fn(async (path: string) => {
+      if (path.endsWith('good.png')) return { ok: true, base64: 'AAAA', mime: 'image/png' }
       throw new Error('attachment bridge unavailable')
     })
     Object.defineProperty(window, 'desktop', {
       configurable: true,
       value: { readAttachmentImage },
     })
-    const attachment: AttachmentMeta = {
-      path: '/tmp/reference.png',
-      name: 'reference.png',
-      ext: 'png',
-      sizeBytes: 128,
-    }
+    const attachments: AttachmentMeta[] = [
+      { path: '/tmp/good.png', name: 'good.png', ext: 'png', sizeBytes: 128 },
+      { path: '/tmp/bad.png', name: 'bad.png', ext: 'png', sizeBytes: 128 },
+    ]
 
     mount(
       createElement(
@@ -222,14 +221,17 @@ describe('AiPanel agent run lifecycle (slides)', () => {
             text: 'Polish this slide',
             nonce: 1,
             autoRun: true,
-            attachments: [attachment],
+            attachments,
           },
         }),
       ),
     )
     await flushEffects()
 
-    expect(readAttachmentImage).toHaveBeenCalled()
-    expect(agentHarness.run).toHaveBeenCalledWith('Polish this slide', [])
+    expect(readAttachmentImage).toHaveBeenCalledWith('/tmp/good.png')
+    expect(readAttachmentImage).toHaveBeenCalledWith('/tmp/bad.png')
+    expect(agentHarness.run).toHaveBeenCalledWith('Polish this slide', [
+      { base64: 'AAAA', mime: 'image/png' },
+    ])
   })
 })
