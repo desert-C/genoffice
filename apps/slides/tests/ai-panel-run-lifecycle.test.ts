@@ -17,9 +17,8 @@ const agentHarness = vi.hoisted(() => ({
 }))
 
 vi.mock('@genoffice/agent-core', async () => {
-  const actual = await vi.importActual<typeof import('@genoffice/agent-core')>(
-    '@genoffice/agent-core',
-  )
+  const actual =
+    await vi.importActual<typeof import('@genoffice/agent-core')>('@genoffice/agent-core')
   return {
     ...actual,
     AgentLoop: class MockAgentLoop {
@@ -74,10 +73,7 @@ import { AI_PROVIDERS, type AiSettings, type AttachmentMeta } from '../src/share
 const settings: AiSettings = {
   provider: 'anthropic',
   providers: Object.fromEntries(
-    AI_PROVIDERS.map((provider) => [
-      provider.id,
-      { apiKey: '', model: provider.defaultModel },
-    ]),
+    AI_PROVIDERS.map((provider) => [provider.id, { apiKey: '', model: provider.defaultModel }]),
   ) as AiSettings['providers'],
 }
 
